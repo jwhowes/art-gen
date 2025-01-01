@@ -1,6 +1,6 @@
 # TODO:
 #   1. FiLM                             x
-#   2. FiLMUNet
+#   2. FiLMUNet                         x
 #   3. Diffusion Noise Scheduler        x
 #   4. DDPM Loss (with pretrained VAE)
 #   5. Diffusion Sampling
@@ -115,6 +115,28 @@ class DiffusionModel(nn.Module):
         t_emb = self.t_model(t)
 
         x = self.stem(z_t)
+
+        acts = []
+        for down_blocks, down_sample in zip(self.down_path, self.down_samples):
+            for block in down_blocks:
+                x = block(x, t_emb)
+
+            acts.append(x)
+            x = down_sample(x)
+
+        for block in self.mid_blocks:
+            x = block(x, t_emb)
+
+        for up_blocks, up_sample, up_combine, act in zip(self.up_path, self.up_samples, self.up_combines, acts[::-1]):
+            x = up_combine(torch.concatenate((
+                up_sample(x),
+                act
+            ), dim=1))
+
+            for block in up_blocks:
+                x = block(x, t)
+
+        return self.head(x)
 
     def forward(self, image):
         assert not self._sample, "Cannot train if model was initiated in sample mode"
