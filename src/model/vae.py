@@ -169,8 +169,8 @@ class VAE(nn.Module):
 
         if do_adv:
             # Calculate adaptive adversarial weight
-            rec_grads = torch.autograd.grad(rec_loss, self.decoder.head, retain_graph=True)[0]
-            adv_grads = torch.autograd.grad(adv_loss, self.discriminator.head, retain_graph=True)[0]
+            rec_grads = torch.autograd.grad(rec_loss, self.decoder.head.weight, retain_graph=True)[0]
+            adv_grads = torch.autograd.grad(adv_loss, self.discriminator.head.weight, retain_graph=True)[0]
 
             with torch.no_grad():
                 adaptive_adv_weight = (torch.norm(rec_grads) / (torch.norm(adv_grads) + 1e-4)).clamp(min=0.0, max=1e4)
