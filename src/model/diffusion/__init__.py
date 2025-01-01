@@ -3,8 +3,10 @@
 #   2. FiLMUNet                         x
 #   3. Diffusion Noise Scheduler        x
 #   4. DDPM Loss (with pretrained VAE)
-#   5. Diffusion Sampling
+#   5. DDPM Training
+#   6. Diffusion Sampling
 import torch
+import torch.nn.functional as F
 import os
 
 from torch import nn
@@ -144,3 +146,7 @@ class DiffusionModel(nn.Module):
         z_0 = self.encoder(image).sample()
 
         z_t, eps, t = self.scheduler.add_noise(z_0)
+
+        pred_eps = self.pred_noise(z_t, t)
+
+        return F.mse_loss(pred_eps, eps)
