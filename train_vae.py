@@ -69,7 +69,7 @@ def train(
                 disc_opt.zero_grad()
 
                 with accelerator.autocast():
-                    disc_loss = accelerator.unwrap(model).disc_loss(image)
+                    disc_loss = accelerator.unwrap_model(model).disc_loss(image)
 
                 accelerator.backward(disc_loss)
 
