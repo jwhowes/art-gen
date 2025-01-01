@@ -8,20 +8,16 @@ from ..util import LayerNorm2d
 
 class NoiseScheduler(nn.Module):
     def __init__(
-            self, num_timesteps: int = 1000, schedule: str = "linear"
+            self, num_timesteps: int = 1000
     ):
         super(NoiseScheduler, self).__init__()
         self.num_timesteps = num_timesteps
 
-        if schedule == "linear":
-            self.register_buffer(
-                "beta",
-                torch.linspace(1e-4, 20 / num_timesteps, num_timesteps),
-                persistent=False
-            )
-        else:
-            raise NotImplementedError("Schedule method not found")
-
+        self.register_buffer(
+            "beta",
+            torch.linspace(1e-4, 20 / num_timesteps, num_timesteps),
+            persistent=False
+        )
         self.register_buffer(
             "alpha",
             (1 - self.beta).cumprod(0),
