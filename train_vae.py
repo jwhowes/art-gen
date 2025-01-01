@@ -65,9 +65,8 @@ def train(
             vae_opt.step()
             vae_lr_scheduler.step()
 
+            disc_opt.zero_grad()
             if do_adv:
-                disc_opt.zero_grad()
-
                 with accelerator.autocast():
                     disc_loss = accelerator.unwrap_model(model).disc_loss(image)
 
