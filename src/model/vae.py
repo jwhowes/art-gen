@@ -157,7 +157,7 @@ class VAE(nn.Module):
 
         logits_fake = self.discriminator(pred)
 
-        rec_loss = (pred - image).abs()
+        rec_loss = (pred - image).abs().mean()
         kl_loss = dist.kl.mean()
         adv_loss = F.binary_cross_entropy_with_logits(logits_fake, torch.ones_like(logits_fake))
 
