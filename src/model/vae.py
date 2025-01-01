@@ -130,7 +130,7 @@ class VAE(nn.Module):
 
         self.encoder = VAEEncoder(image_channels, d_latent, vae_dims, vae_depths)
         self.decoder = VAEDecoder(image_channels, d_latent, vae_dims, vae_depths)
-        self.discriminator = Discriminator(image_channels, disc_dims, disc_depths)
+        self.discriminator = Discriminator(image_channels, disc_patch_size, disc_dims, disc_depths)
 
     def state_dict(self, *args, **kwargs):
         return {
