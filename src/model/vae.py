@@ -18,6 +18,18 @@ class ModelConfig(SubConfig):
         super().__init__(config)
 
 
+class VAEModelConfig(ModelConfig):
+    def __init__(self, config: Optional[dict] = None):
+        self.d_latent = 4
+        super().__init__(config)
+
+
+class DiscriminatorConfig(ModelConfig):
+    def __init__(self, config: Optional[dict] = None):
+        self.patch_size = 4
+        super().__init__(config)
+
+
 class VAEConfig(SubConfig):
     def __init__(self, config: Optional[dict] = None):
         self.kl_weight: float = 1e-4
@@ -26,16 +38,11 @@ class VAEConfig(SubConfig):
 
         super().__init__(config)
 
-        self.vae = ModelConfig(
+        self.vae: VAEModelConfig = VAEModelConfig(
             config.get("vae") if config is not None else None
         )
 
-        if config is not None and "vae" in config:
-            self.vae.d_latent = config["vae"].get("d_latent", 4)
-        else:
-            self.vae.d_latent = 4
-
-        self.discriminator = ModelConfig(
+        self.discriminator: DiscriminatorConfig = DiscriminatorConfig(
             config.get("discriminator") if config is not None else None
         )
 
@@ -95,14 +102,18 @@ class VAEDecoder(Decoder):
 
 class Discriminator(Encoder):
     def __init__(
-            self, image_channels: int,
+            self, image_channels: int, patch_size: int = 4,
             dims: Tuple[int, ...] = (96, 192, 384, 768), depths: Tuple[int, ...] = (3, 3, 9, 4)
     ):
-        super(Discriminator, self).__init__(image_channels, dims, depths)
+        super(Discriminator, self).__init__(image_channels=None, dims=dims, depths=depths)
+        self.stem = nn.Conv2d(image_channels, dims[0], kernel_size=patch_size, stride=patch_size)
         self.head = nn.Conv2d(dims[-1], 1, kernel_size=1)
 
     def forward(self, x):
-        return self.head(super().forward(x)).squeeze(1)
+        x = self.stem(x)
+        x = super().forward(x)
+
+        return self.head(x).squeeze(1)
 
 
 class VAE(nn.Module):
@@ -110,6 +121,7 @@ class VAE(nn.Module):
             self, image_channels: int, d_latent: int,
             vae_dims: Tuple[int, ...] = (96, 192, 384, 768), vae_depths: Tuple[int, ...] = (3, 3, 9, 4),
             disc_dims: Tuple[int, ...] = (96, 192, 384, 768), disc_depths: Tuple[int, ...] = (3, 3, 9, 4),
+            disc_patch_size: int = 4,
             kl_weight: float = 1e-4, adv_weight: float = 0.5
     ):
         super(VAE, self).__init__()

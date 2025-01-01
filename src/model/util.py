@@ -28,13 +28,16 @@ class ConvNeXtBlock(nn.Module):
 
 class Encoder(nn.Module):
     def __init__(
-            self, image_channels: int,
+            self, image_channels: Optional[int],
             dims: Tuple[int, ...] = (96, 192, 384, 768), depths: Tuple[int, ...] = (3, 3, 9, 4)
     ):
         super(Encoder, self).__init__()
-        layers = [
-            nn.Conv2d(image_channels, dims[0], kernel_size=5, padding=2)
-        ]
+        if image_channels is None:
+            layers = []
+        else:
+            layers = [
+                nn.Conv2d(image_channels, dims[0], kernel_size=5, padding=2)
+            ]
 
         for i in range(len(dims) - 1):
             layers += [

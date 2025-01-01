@@ -115,6 +115,7 @@ if __name__ == "__main__":
 
         disc_dims=config.model.discriminator.dims,
         disc_depths=config.model.discriminator.depths,
+        disc_patch_size=config.model.discriminator.patch_size,
 
         kl_weight=config.model.kl_weight,
         adv_weight=config.model.adv_weight
