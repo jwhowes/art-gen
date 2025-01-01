@@ -116,7 +116,6 @@ if __name__ == "__main__":
         disc_dims=config.model.discriminator.dims,
         disc_depths=config.model.discriminator.depths,
 
-        log_var_init=config.model.log_var_init,
         kl_weight=config.model.kl_weight,
         adv_weight=config.model.adv_weight
     )

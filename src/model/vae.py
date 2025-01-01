@@ -23,7 +23,6 @@ class VAEConfig(SubConfig):
         self.kl_weight: float = 1e-4
         self.adv_weight: float = 0.5
         self.adv_start: float = 0.5
-        self.log_var_init: float = 0.0
 
         super().__init__(config)
 
@@ -111,7 +110,7 @@ class VAE(nn.Module):
             self, image_channels: int, d_latent: int,
             vae_dims: Tuple[int, ...] = (96, 192, 384, 768), vae_depths: Tuple[int, ...] = (3, 3, 9, 4),
             disc_dims: Tuple[int, ...] = (96, 192, 384, 768), disc_depths: Tuple[int, ...] = (3, 3, 9, 4),
-            log_var_init: float = 0.0, kl_weight: float = 1e-4, adv_weight: float = 0.5
+            kl_weight: float = 1e-4, adv_weight: float = 0.5
     ):
         super(VAE, self).__init__()
         self.kl_weight = kl_weight
@@ -120,14 +119,12 @@ class VAE(nn.Module):
         self.encoder = VAEEncoder(image_channels, d_latent, vae_dims, vae_depths)
         self.decoder = VAEDecoder(image_channels, d_latent, vae_dims, vae_depths)
         self.discriminator = Discriminator(image_channels, disc_dims, disc_depths)
-        self.log_var = nn.Parameter(torch.ones(size=()) * log_var_init)
 
     def state_dict(self, *args, **kwargs):
         return {
             "encoder": self.encoder.state_dict(*args, **kwargs),
             "decoder": self.decoder.state_dict(*args, **kwargs),
-            "discriminator": self.discriminator.state_dict(*args, **kwargs),
-            "log_var": self.log_var.data
+            "discriminator": self.discriminator.state_dict(*args, **kwargs)
         }
 
     def load_state_dict(self, state_dict: Mapping[str, Any], strict: bool = True, *args, **kwargs):
@@ -139,9 +136,6 @@ class VAE(nn.Module):
 
         if strict or "discriminator" in state_dict:
             self.discriminator.load_state_dict(state_dict["discriminator"], strict, *args, **kwargs)
-
-        if strict or "log_var" in state_dict:
-            self.log_var.data = state_dict["log_var"]
 
     def forward(self, image, sample=True, return_dist=True):
         dist = self.encoder(image)
@@ -163,9 +157,9 @@ class VAE(nn.Module):
 
         logits_fake = self.discriminator(pred)
 
-        rec_loss = ((image - pred).abs() / self.log_var.exp() + self.log_var).mean()
+        rec_loss = F.mse_loss(pred, image)
         kl_loss = dist.kl.mean()
-        adv_loss = -logits_fake.mean()
+        adv_loss = F.binary_cross_entropy_with_logits(logits_fake, torch.ones_like(logits_fake))
 
         if do_adv:
             # Calculate adaptive adversarial weight
@@ -196,15 +190,15 @@ class VAE(nn.Module):
         logits_real = self.discriminator(image)
         logits_fake = self.discriminator(pred)
 
-        loss = 0.5 * (
-            F.relu(1. - logits_real).mean() +
-            F.relu(1. + logits_fake).mean()
+        loss = (
+            F.binary_cross_entropy_with_logits(logits_real, torch.ones_like(logits_real)) +
+            F.binary_cross_entropy_with_logits(logits_fake, torch.zeros_like(logits_fake))
         )
 
         return loss
 
     def vae_parameters(self):
-        return list(self.encoder.parameters()) + list(self.decoder.parameters()) + [self.log_var]
+        return list(self.encoder.parameters()) + list(self.decoder.parameters())
 
     def disc_parameters(self):
         return self.discriminator.parameters()

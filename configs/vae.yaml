@@ -2,5 +2,6 @@ warmup: 0.2
 dataset:
   batch_size: 10
 model:
+  kl_weight: 1e-3
   vae:
     dims: [128, 256, 512, 1024]
