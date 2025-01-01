@@ -189,7 +189,7 @@ class VAE(nn.Module):
 
     def disc_loss(self, image):
         with torch.no_grad():
-            pred = self(image, return_dist=False)
+            pred = self(image, return_dist=False).detach()
 
         logits_real = self.discriminator(image)
         logits_fake = self.discriminator(pred)
