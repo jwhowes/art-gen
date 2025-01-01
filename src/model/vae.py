@@ -167,24 +167,16 @@ class VAE(nn.Module):
     def vae_loss(self, image, do_adv=True):
         pred, dist = self(image)
 
-        logits_fake = self.discriminator(pred)
-
         rec_loss = (pred - image).abs().mean()
         kl_loss = dist.kl.mean()
-        adv_loss = F.binary_cross_entropy_with_logits(logits_fake, torch.ones_like(logits_fake))
 
         if do_adv:
-            # Calculate adaptive adversarial weight
-            rec_grads = torch.autograd.grad(rec_loss, self.decoder.head.weight, retain_graph=True)[0]
-            adv_grads = torch.autograd.grad(adv_loss, self.discriminator.head.weight, retain_graph=True)[0]
-
-            with torch.no_grad():
-                adaptive_adv_weight = (torch.norm(rec_grads) / (torch.norm(adv_grads) + 1e-4)).clamp(min=0.0, max=1e4)
+            logits_fake = self.discriminator(pred)
+            adv_loss = F.binary_cross_entropy_with_logits(logits_fake, torch.ones_like(logits_fake))
         else:
-            adaptive_adv_weight = 0.0
             adv_loss = torch.tensor(0.0, device=image.device)
 
-        loss = rec_loss + self.kl_weight * kl_loss + self.adv_weight * adaptive_adv_weight * adv_loss
+        loss = rec_loss + self.kl_weight * kl_loss + self.adv_weight * adv_loss
 
         return {
             "loss": loss,
