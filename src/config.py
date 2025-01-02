@@ -95,7 +95,7 @@ class Config[T](SubConfig):
         if accelerator.is_main_process:
             torch.save(
                 accelerator.get_state_dict(model),
-                os.path.join(self.model_dir, f"checkpoint_{self._epoch:02.pt}")
+                os.path.join(self.model_dir, f"checkpoint_{self._epoch:02}.pt")
             )
 
             with open(os.path.join(self.exp_dir, "log.csv"), "a") as f:
