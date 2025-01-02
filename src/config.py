@@ -101,6 +101,6 @@ class Config[T](SubConfig):
             with open(os.path.join(self.exp_dir, "log.csv"), "a") as f:
                 f.write(str(self._epoch))
                 f.write(",".join([
-                    f"{m:.4f}" for m in metrics
+                    f"{float(m):.4f}" for m in metrics
                 ]))
                 f.write(f",{datetime.now()}\n")

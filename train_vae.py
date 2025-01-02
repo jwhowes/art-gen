@@ -90,7 +90,7 @@ def train(
                     f"Adv Loss: {vae_loss['metrics']['adv loss']:.4f}"
                 )
 
-        config.log(model, [m / len(dataloader) for m in metrics.values()])
+        config.log(model, [metrics[m] / len(dataloader) for m in metrics])
 
 
 if __name__ == "__main__":
