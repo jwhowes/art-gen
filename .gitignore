@@ -4,3 +4,6 @@
 
 .pdm-python
 .DS_Store
+
+experiments/
+configs/

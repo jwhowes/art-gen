@@ -38,14 +38,14 @@ class Discriminator(ResNet, AbstractModel):
                 self, rearrange(
                     x, "b c (p1 h) (p2 w) -> (b h w) c p1 p2",
                     p1=self.patch_size[0],
-                    p2=self.patch_size[2]
+                    p2=self.patch_size[1]
                 )
             )
         ).squeeze((2, 3))
 
         return rearrange(
             self.head(x).squeeze(-1),
-            "(b h w) -> b h w", h=H // self.patch_size, w=W // self.patch_size
+            "(b h w) -> b h w", h=H // self.patch_size[0], w=W // self.patch_size[1]
         )
 
     @staticmethod
