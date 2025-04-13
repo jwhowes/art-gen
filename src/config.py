@@ -19,3 +19,7 @@ class Config(ABC, BaseModel):
             return cls()
 
         return cls.model_validate(config)
+
+    def to_yaml(self, yaml_path: str):
+        with open(yaml_path, "w+") as f:
+            yaml.safe_dump(self.model_dump(), f)
