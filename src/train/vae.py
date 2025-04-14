@@ -36,6 +36,8 @@ class VAETrainer(AbstractTrainer):
     config_cls = VAETrainConfig
 
     def train(self):
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
         encoder = VAEEncoder.from_config(self.config.encoder)
         decoder = VAEDecoder.from_config(self.config.decoder)
         discriminator = Discriminator.from_config(self.config.discriminator)
@@ -68,6 +70,10 @@ class VAETrainer(AbstractTrainer):
         encoder.train()
         decoder.train()
         discriminator.train()
+
+        encoder.to(device)
+        decoder.to(device)
+        discriminator.to(device)
         for epoch in range(self.config.train.num_epochs):
             print(f"EPOCH {epoch + 1} / {self.config.train.num_epochs}")
 
@@ -75,6 +81,8 @@ class VAETrainer(AbstractTrainer):
             total_recon = 0
             total_disc = 0
             for i, image in enumerate(dataloader):
+                image = image.to(device)
+
                 if i % 2 == 0:
                     vae_opt.zero_grad()
 
