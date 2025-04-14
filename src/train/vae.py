@@ -3,12 +3,13 @@ import torch.nn.functional as F
 from pydantic import BaseModel
 from torch.utils.data import DataLoader
 
-from .abstract import AbstractTrainer
-
 from ..config import Config
 from ..model.vae import VAEEncoder, VAEDecoder, VAEEncoderConfig, VAEDecoderConfig
 from ..model.gan import Discriminator, DiscriminatorConfig
 from ..data import UnconditionalDataset, DatasetConfig
+from ..accelerator import accelerator
+
+from .abstract import AbstractTrainer
 
 
 class VAETrainConfig(Config):
@@ -36,8 +37,6 @@ class VAETrainer(AbstractTrainer):
     config_cls = VAETrainConfig
 
     def train(self):
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
         encoder = VAEEncoder.from_config(self.config.encoder)
         decoder = VAEDecoder.from_config(self.config.decoder)
         discriminator = Discriminator.from_config(self.config.discriminator)
@@ -67,22 +66,21 @@ class VAETrainer(AbstractTrainer):
             self.config.data.image_size // (2 ** (len(self.config.encoder.dims) - 1))
         )
 
+        encoder, decoder, discriminator, dataloader, vae_opt, disc_opt = accelerator.prepare(
+            encoder, decoder, discriminator, dataloader, vae_opt, disc_opt
+        )
+
         encoder.train()
         decoder.train()
         discriminator.train()
-
-        encoder.to(device)
-        decoder.to(device)
-        discriminator.to(device)
         for epoch in range(self.config.train.num_epochs):
-            print(f"EPOCH {epoch + 1} / {self.config.train.num_epochs}")
+            if accelerator.is_main_process:
+                print(f"EPOCH {epoch + 1} / {self.config.train.num_epochs}")
 
             total_kl = 0
             total_recon = 0
             total_disc = 0
             for i, image in enumerate(dataloader):
-                image = image.to(device)
-
                 if i % 2 == 0:
                     vae_opt.zero_grad()
 
@@ -107,12 +105,12 @@ class VAETrainer(AbstractTrainer):
                     total_recon += recon.item()
                     total_disc += disc.item()
 
-                    if i % self.config.train.log_interval == 0:
+                    if accelerator.is_main_process and i % self.config.train.log_interval == 0:
                         print(f"\t{i} / {len(dataloader)} iters.\tKL: {kl.item():.4f}\tDisc: {disc.item():.4f}\tRecon: {recon.item():.4f}")
                 else:
                     vae_opt.zero_grad()
 
-                    fake = decoder(torch.randn(image.shape[0], *latent_size, device=image.device))
+                    fake = decoder(torch.randn(image.shape[0], *latent_size, device=accelerator.device))
 
                     pred_fake = discriminator(fake)
 

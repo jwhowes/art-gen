@@ -7,6 +7,7 @@ import torch
 from torch import Tensor
 
 from ..config import Config
+from ..accelerator import accelerator
 
 
 class AbstractTrainer(ABC):
@@ -34,7 +35,7 @@ class AbstractTrainer(ABC):
 
         config = cls.config_cls.from_yaml(config_path)
 
-        if checkpoint == 1:
+        if checkpoint == 1 and accelerator.is_main_process:
             if not os.path.isdir(ckpt_dir):
                 os.makedirs(ckpt_dir)
 
@@ -52,14 +53,17 @@ class AbstractTrainer(ABC):
         )
 
     def save_checkpoint(self, state_dict: Dict[str, Tensor | Dict[str, Tensor]], *metrics: float):
-        with open(self.log_path, "a") as f:
-            f.write(f"{self.checkpoint},{','.join([f'{m}' for m in metrics])},"
-                    f"{datetime.now()}\n")
+        accelerator.wait_for_everyone()
 
-        torch.save(
-            state_dict,
-            os.path.join(self.ckpt_dir, f"checkpoint_{self.checkpoint:03}.pt")
-        )
+        if accelerator.is_main_process:
+            with open(self.log_path, "a") as f:
+                f.write(f"{self.checkpoint},{','.join([f'{m}' for m in metrics])},"
+                        f"{datetime.now()}\n")
+
+            torch.save(
+                state_dict,
+                os.path.join(self.ckpt_dir, f"checkpoint_{self.checkpoint:03}.pt")
+            )
 
         self.checkpoint += 1
 
