@@ -97,7 +97,7 @@ class VAETrainer(AbstractTrainer):
                     disc = F.binary_cross_entropy_with_logits(pred_disc, torch.ones_like(pred_disc))
 
                     loss = recon + self.config.train.kl_weight * kl + self.config.train.disc_weight * disc
-                    loss.backward()
+                    accelerator.backward(loss)
 
                     vae_opt.step()
 
@@ -115,7 +115,7 @@ class VAETrainer(AbstractTrainer):
                     pred_fake = discriminator(fake)
 
                     loss = F.binary_cross_entropy_with_logits(pred_fake, torch.ones_like(pred_fake))
-                    loss.backward()
+                    accelerator.backward(loss)
                     vae_opt.step()
 
                     disc_opt.zero_grad()
@@ -132,9 +132,9 @@ class VAETrainer(AbstractTrainer):
 
             self.save_checkpoint(
                 {
-                    "encoder": encoder.state_dict(),
-                    "decoder": decoder.state_dict(),
-                    "discriminator": discriminator.state_dict()
+                    "encoder": accelerator.get_state_dict(encoder),
+                    "decoder": accelerator.get_state_dict(decoder),
+                    "discriminator": accelerator.get_state_dict(discriminator)
                 },
                 total_kl / (len(dataloader) // 2),
                 total_disc / (len(dataloader) // 2),
