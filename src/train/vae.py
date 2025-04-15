@@ -20,6 +20,7 @@ class VAETrainConfig(Config):
         vae_lr: float = 1e-4
         disc_lr: float = 1e-4
         weight_decay: float = 0.0
+        clip_grad: float = 1.0
 
         kl_weight: float = 1e-4
         disc_weight: float = 0.1
@@ -84,20 +85,24 @@ class VAETrainer(AbstractTrainer):
                 if i % 2 == 0:
                     vae_opt.zero_grad()
 
-                    dist = encoder(image)
-                    kl = dist.kl().mean()
+                    with accelerator.autocast():
+                        dist = encoder(image)
+                        kl = dist.kl().mean()
 
-                    z = dist.sample()
-                    pred = decoder(z)
+                        z = dist.sample()
+                        pred = decoder(z)
 
-                    recon = F.mse_loss(pred, image)
+                        recon = F.mse_loss(pred, image)
 
-                    pred_disc = discriminator(pred)
+                        pred_disc = discriminator(pred)
 
-                    disc = F.binary_cross_entropy_with_logits(pred_disc, torch.ones_like(pred_disc))
+                        disc = F.binary_cross_entropy_with_logits(pred_disc, torch.ones_like(pred_disc))
 
-                    loss = recon + self.config.train.kl_weight * kl + self.config.train.disc_weight * disc
+                        loss = recon + self.config.train.kl_weight * kl + self.config.train.disc_weight * disc
+
                     accelerator.backward(loss)
+                    accelerator.clip_grad_norm_(encoder.parameters(), self.config.train.clip_grad)
+                    accelerator.clip_grad_norm_(decoder.parameters(), self.config.train.clip_grad)
 
                     vae_opt.step()
 
@@ -110,24 +115,32 @@ class VAETrainer(AbstractTrainer):
                 else:
                     vae_opt.zero_grad()
 
-                    fake = decoder(torch.randn(image.shape[0], *latent_size, device=accelerator.device))
+                    with accelerator.autocast():
+                        fake = decoder(torch.randn(image.shape[0], *latent_size, device=accelerator.device))
 
-                    pred_fake = discriminator(fake)
+                        pred_fake = discriminator(fake)
 
-                    loss = F.binary_cross_entropy_with_logits(pred_fake, torch.ones_like(pred_fake))
+                        loss = F.binary_cross_entropy_with_logits(pred_fake, torch.ones_like(pred_fake))
+
                     accelerator.backward(loss)
+                    accelerator.clip_grad_norm_(decoder.parameters(), self.config.train.clip_grad)
+
                     vae_opt.step()
 
                     disc_opt.zero_grad()
 
-                    pred_fake = discriminator(fake.detach())
-                    pred_real = discriminator(image)
+                    with accelerator.autocast():
+                        pred_fake = discriminator(fake.detach())
+                        pred_real = discriminator(image)
 
-                    loss = (
-                        F.binary_cross_entropy_with_logits(pred_real, torch.ones_like(pred_real)) +
-                        F.binary_cross_entropy_with_logits(pred_fake, torch.zeros_like(pred_fake))
-                    )
-                    loss.backward()
+                        loss = (
+                            F.binary_cross_entropy_with_logits(pred_real, torch.ones_like(pred_real)) +
+                            F.binary_cross_entropy_with_logits(pred_fake, torch.zeros_like(pred_fake))
+                        )
+
+                    accelerator.backward(loss)
+                    accelerator.clip_grad_norm_(discriminator.parameters(), self.config.train.clip_grad)
+
                     disc_opt.step()
 
             self.save_checkpoint(
