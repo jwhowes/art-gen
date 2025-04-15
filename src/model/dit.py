@@ -1,16 +1,19 @@
 from __future__ import annotations
 
-from typing import Optional
+import os
+from typing import Optional, Tuple
 from math import sqrt
 
 import torch
 import torch.nn.functional as F
 from einops import rearrange
 from torch import nn, Tensor
+from pydantic import BaseModel
 
 from ..config import Config
 
 from .abstract import AbstractModel
+from ..train.vae import VAETrainConfig
 
 
 class Attention(nn.Module):
@@ -138,9 +141,13 @@ class SinusoidalEmbedding(nn.Module):
 
 
 class DiTConfig(Config):
-    in_channels: int = 4
-    in_size: int
-    num_classes: int
+    class VAE(BaseModel):
+        experiment: str
+        checkpoint: int
+
+    vae: VAE
+
+    num_classes: int | Tuple[int, ...]
 
     patch_size: int
 
@@ -151,7 +158,7 @@ class DiTConfig(Config):
 
 class DiT(AbstractModel):
     def __init__(
-            self, in_channels: int, in_size: int, num_classes: int,
+            self, in_channels: int, in_size: int, num_classes: int | Tuple[int, ...],
             patch_size: int,
             d_model: int, n_heads: int, n_layers: int
     ):
@@ -182,13 +189,19 @@ class DiT(AbstractModel):
             for _ in range(n_layers)
         ])
 
-        self.class_emb = nn.Embedding(num_classes, d_model)
+        num_classes = num_classes if isinstance(num_classes, tuple) else (num_classes,)
+        self.class_embs = nn.ModuleList([
+            nn.Embedding(n, d_model) for n in num_classes
+        ])
         self.t_emb = SinusoidalEmbedding(d_model)
 
         self.head = nn.Linear(d_model, in_channels * patch_size * patch_size)
 
     def forward(self, x_t: Tensor, t: Tensor, cls: Tensor) -> Tensor:
-        c = self.t_emb(t) + self.cls_emb(cls)
+        c = self.t_emb(t) + torch.stack([
+            self.class_embs[i](cls[:, i])
+            for i in range(len(self.class_embs))
+        ], dim=-1).sum(-1)
 
         x = self.patch_emb(rearrange(
             x_t, "b c (p1 h) (p2 h) -> b (h w) (c p1 p2)",
@@ -205,9 +218,15 @@ class DiT(AbstractModel):
 
     @staticmethod
     def from_config(config: DiTConfig) -> DiT:
+        vae_config = VAETrainConfig.from_yaml(
+            os.path.join(
+                "experiments", config.vae.experiment
+            )
+        )
+
         return DiT(
-            in_channels=config.in_channels,
-            in_size=config.in_size,
+            in_channels=vae_config.encoder.latent_channels,
+            in_size=vae_config.data.image_size // (2 ** (len(vae_config.encoder.dims) - 1)),
             num_classes=config.num_classes,
             patch_size=config.patch_size,
             d_model=config.d_model,
