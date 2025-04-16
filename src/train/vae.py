@@ -82,66 +82,51 @@ class VAETrainer(AbstractTrainer):
             total_recon = 0
             total_disc = 0
             for i, image in enumerate(dataloader):
-                if i % 2 == 0:
-                    vae_opt.zero_grad()
+                vae_opt.zero_grad()
 
-                    with accelerator.autocast():
-                        dist = encoder(image)
-                        kl = dist.kl().mean()
+                with accelerator.autocast():
+                    dist = encoder(image)
+                    kl = dist.kl().mean()
 
-                        z = dist.sample()
-                        pred = decoder(z)
+                    z = dist.sample()
+                    pred = decoder(z)
 
-                        recon = F.mse_loss(pred, image)
+                    recon = F.mse_loss(pred, image)
 
-                        pred_disc = discriminator(pred)
+                    pred_disc = discriminator(pred)
 
-                        disc = F.binary_cross_entropy_with_logits(pred_disc, torch.ones_like(pred_disc))
+                    disc = F.binary_cross_entropy_with_logits(pred_disc, torch.ones_like(pred_disc))
 
-                        loss = recon + self.config.train.kl_weight * kl + self.config.train.disc_weight * disc
+                    loss = recon + self.config.train.kl_weight * kl + self.config.train.disc_weight * disc
 
-                    accelerator.backward(loss)
-                    accelerator.clip_grad_norm_(encoder.parameters(), self.config.train.clip_grad)
-                    accelerator.clip_grad_norm_(decoder.parameters(), self.config.train.clip_grad)
+                accelerator.backward(loss)
+                accelerator.clip_grad_norm_(encoder.parameters(), self.config.train.clip_grad)
+                accelerator.clip_grad_norm_(decoder.parameters(), self.config.train.clip_grad)
 
-                    vae_opt.step()
+                vae_opt.step()
 
-                    total_kl += kl.item()
-                    total_recon += recon.item()
-                    total_disc += disc.item()
+                total_kl += kl.item()
+                total_recon += recon.item()
+                total_disc += disc.item()
 
-                    if accelerator.is_main_process and i % self.config.train.log_interval == 0:
-                        print(f"\t{i} / {len(dataloader)} iters.\tKL: {kl.item():.4f}\tDisc: {disc.item():.4f}\tRecon: {recon.item():.4f}")
-                else:
-                    vae_opt.zero_grad()
+                if accelerator.is_main_process and i % self.config.train.log_interval == 0:
+                    print(f"\t{i} / {len(dataloader)} iters.\tKL: {kl.item():.4f}\tDisc: {disc.item():.4f}\tRecon: {recon.item():.4f}")
 
-                    with accelerator.autocast():
-                        fake = decoder(torch.randn(image.shape[0], *latent_size, device=accelerator.device))
+                disc_opt.zero_grad()
 
-                        pred_fake = discriminator(fake)
+                with accelerator.autocast():
+                    pred_real = discriminator(image)
+                    pred_fake = discriminator(pred.detach())
 
-                        loss = F.binary_cross_entropy_with_logits(pred_fake, torch.ones_like(pred_fake))
+                    loss = (
+                        F.binary_cross_entropy_with_logits(pred_real, torch.ones_like(pred_real)) +
+                        F.binary_cross_entropy_with_logits(pred_fake, torch.zeros_like(pred_fake))
+                    )
 
-                    accelerator.backward(loss)
-                    accelerator.clip_grad_norm_(decoder.parameters(), self.config.train.clip_grad)
+                accelerator.backward(loss)
+                accelerator.clip_grad_norm_(discriminator.parameters(), self.config.train.clip_grad)
 
-                    vae_opt.step()
-
-                    disc_opt.zero_grad()
-
-                    with accelerator.autocast():
-                        pred_fake = discriminator(fake.detach())
-                        pred_real = discriminator(image)
-
-                        loss = (
-                            F.binary_cross_entropy_with_logits(pred_real, torch.ones_like(pred_real)) +
-                            F.binary_cross_entropy_with_logits(pred_fake, torch.zeros_like(pred_fake))
-                        )
-
-                    accelerator.backward(loss)
-                    accelerator.clip_grad_norm_(discriminator.parameters(), self.config.train.clip_grad)
-
-                    disc_opt.step()
+                disc_opt.step()
 
             self.save_checkpoint(
                 {
